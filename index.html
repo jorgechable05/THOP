@@ -47,18 +47,17 @@
     setOrders((orders||[]).map(o=>({id:o.id,folio:"THOP-"+o.id.slice(0,8).toUpperCase(),userId:o.customer_id,userEmail:user.email,total:Number(o.total),subtotal:Number(o.subtotal),estado:o.status,fecha:o.created_at,notes:o.notes,paymentMethod:"",items:(details||[]).filter(d=>d.order_id===o.id).map(d=>({productId:d.product_id,nombre:pm.get(d.product_id)?.name||"Producto",sku:pm.get(d.product_id)?.sku||"",qty:d.quantity,precio:Number(d.precio_unitario),subtotal:Number(d.line_total)})),tracking:(tracking||[]).filter(t=>t.order_id===o.id).map(t=>({status:t.status,nota:t.note,fecha:t.created_at}))})));
   }
   async function loadAdmin(setProducts,setUsers,setOrders){
-    const [{data:ps,error:pe},{data:users,error:ue},{data:orders,error:oe},{data:lots,error:le},{data:suppliers,error:se}]=await Promise.all([
+    const [{data:ps,error:pe},{data:users,error:ue},{data:orders,error:oe},{data:inventory,error:ie},{data:suppliers,error:se}]=await Promise.all([
       sb.rpc("admin_list_products"),
       sb.rpc("admin_list_profiles"),
       sb.rpc("admin_list_orders"),
-      sb.rpc("admin_list_lots"),
+      sb.rpc("admin_list_inventory_summary"),
       sb.rpc("admin_list_suppliers")
     ]);
-    if(pe)throw pe;if(ue)throw ue;if(oe)throw oe;if(le)throw le;if(se)throw se;
+    if(pe)throw pe;if(ue)throw ue;if(oe)throw oe;if(ie)throw ie;if(se)throw se;
+    const im=new Map((inventory||[]).map(x=>[x.product_id,x]));
     const sm=new Map((suppliers||[]).map(x=>[x.id,x.name]));
-    const byProduct=new Map();
-    (lots||[]).forEach(l=>{let a=byProduct.get(l.product_id)||{stock:0,vence:null,proveedor:"",costo:l.unit_cost};a.stock+=Number(l.quantity_available||0);if(l.expiry_date&&(!a.vence||l.expiry_date<a.vence))a.vence=l.expiry_date;a.proveedor=sm.get(l.supplier_id)||a.proveedor;a.costo=Number(l.unit_cost||a.costo||0);byProduct.set(l.product_id,a);});
-    setProducts((ps||[]).map(p=>{const x=byProduct.get(p.id)||{};return {id:p.id,sku:p.sku,nombre:p.name,descripcion:p.description||"",marca:p.brand||"THOP",categoria:p.category_id||"General",imagen:p.image_url||"",precioPublico:Number(p.precio_publico),precioGymBase:Number(p.precio_minorista),precioDistBase:Number(p.precio_mayorista),precioMinorista:Number(p.precio_minorista),precioMayorista:Number(p.precio_mayorista),costo:Number(p.cost),stock:Number(x.stock||0),stockMin:0,vence:x.vence||null,proveedor:x.proveedor||"",oculto:!p.active||!p.visible_catalog};}));
+    setProducts((ps||[]).map(p=>{const x=im.get(p.id)||{};return {id:p.id,sku:p.sku,nombre:p.name,descripcion:p.description||"",marca:p.brand||"THOP",categoria:p.category_id||"General",imagen:p.image_url||"",precioPublico:Number(p.precio_publico),precioGymBase:Number(p.precio_minorista),precioDistBase:Number(p.precio_mayorista),precioMinorista:Number(p.precio_minorista),precioMayorista:Number(p.precio_mayorista),costo:Number(p.cost),stock:Number(x.stock||0),stockMin:0,vence:x.earliest_expiry||null,proveedor:sm.get(x.supplier_id_text)||"",oculto:!p.active||!p.visible_catalog};}));
     setUsers((users||[]).map(u=>({id:u.id,email:u.email,nombre:u.full_name,tipo:u.tipo_cliente,role:u.role,estado:u.estado_cuenta,telefono:u.phone,customPrices:{}})));
     setOrders((orders||[]).map(o=>({id:o.id,folio:"THOP-"+o.id.slice(0,8).toUpperCase(),userId:o.customer_id,userEmail:(users||[]).find(u=>u.id===o.customer_id)?.email||"",total:Number(o.total),subtotal:Number(o.subtotal),estado:o.status,fecha:o.created_at,notes:o.notes,items:[],tracking:[]})));
     return {products:ps||[],lots:lots||[],users:users||[],orders:orders||[],suppliers:suppliers||[]};
