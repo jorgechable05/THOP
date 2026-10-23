@@ -50,18 +50,14 @@
     const {data:{user},error}=await sb.auth.getUser();if(error)throw error;
     if(!user)throw new Error("AUTH_REQUIRED");
     const {data:me,error:meError}=await sb.rpc("current_profile");if(meError)throw meError;
-    const current=Array.isArray(me)?me[0]:me;
-    if(current?.role!=="ADMIN")throw new Error("ADMIN_REQUIRED");
-    const [{data:ps,error:pe},{data:users,error:ue},{data:orders,error:oe},{data:inventory,error:ie},{data:suppliers,error:se}]=await Promise.all([
-      sb.rpc("admin_list_products"),sb.rpc("admin_list_profiles"),sb.rpc("admin_list_orders"),sb.rpc("admin_list_inventory_summary"),sb.rpc("admin_list_suppliers")
-    ]);
+    const current=Array.isArray(me)?me[0]:me;if(current?.role!=="ADMIN")throw new Error("ADMIN_REQUIRED");
+    const [{data:ps,error:pe},{data:users,error:ue},{data:orders,error:oe},{data:inventory,error:ie},{data:suppliers,error:se}]=await Promise.all([sb.rpc("admin_list_products"),sb.rpc("admin_list_profiles"),sb.rpc("admin_list_orders"),sb.rpc("admin_list_inventory_summary"),sb.rpc("admin_list_suppliers")]);
     if(pe)throw pe;if(ue)throw ue;if(oe)throw oe;if(ie)throw ie;if(se)throw se;
-    const im=new Map((inventory||[]).map(x=>[x.product_id,x]));
-    const sm=new Map((suppliers||[]).map(x=>[x.id,x.name]));
+    const im=new Map((inventory||[]).map(x=>[x.product_id,x]));const sm=new Map((suppliers||[]).map(x=>[x.id,x.name]));
     setProducts((ps||[]).map(p=>{const x=im.get(p.id)||{};return {id:p.id,sku:p.sku,nombre:p.name,descripcion:p.description||"",marca:p.brand||"THOP",categoria:p.category_id||"General",imagen:p.image_url||"",precioPublico:Number(p.precio_publico),precioGymBase:Number(p.precio_minorista),precioDistBase:Number(p.precio_mayorista),precioMinorista:Number(p.precio_minorista),precioMayorista:Number(p.precio_mayorista),costo:Number(p.cost),stock:Number(x.stock||0),stockMin:0,vence:x.earliest_expiry||null,proveedor:sm.get(x.supplier_id_text)||"",oculto:!p.active||!p.visible_catalog};}));
     setUsers((users||[]).map(u=>({id:u.id,email:u.email,nombre:u.full_name,tipo:u.tipo_cliente,role:u.role,estado:u.estado_cuenta,telefono:u.phone,customPrices:{}})));
     setOrders((orders||[]).map(o=>({id:o.id,folio:"THOP-"+o.id.slice(0,8).toUpperCase(),userId:o.customer_id,userEmail:(users||[]).find(u=>u.id===o.customer_id)?.email||"",total:Number(o.total),subtotal:Number(o.subtotal),estado:o.status,fecha:o.created_at,notes:o.notes,items:[],tracking:[]})));
-    return {products:ps||[],lots:inventory||[],users:users||[],orders:orders||[],suppliers:suppliers||[]};
+    return {products:ps||[],inventory:inventory||[],users:users||[],orders:orders||[],suppliers:suppliers||[]};
   }
   async function bootstrap({setProducts,setOrders,setUser,setView,setUsers=()=>{}}){
     const {data:{session}}=await sb.auth.getSession();
