@@ -45,14 +45,14 @@
     setOrders((orders||[]).map(o=>({id:o.id,folio:"THOP-"+o.id.slice(0,8).toUpperCase(),userId:o.customer_id,userEmail:user.email,total:Number(o.total),subtotal:Number(o.subtotal),estado:o.status,fecha:o.created_at,notes:o.notes,paymentMethod:"",items:(details||[]).filter(d=>d.order_id===o.id).map(d=>({productId:d.product_id,nombre:pm.get(d.product_id)?.name||"Producto",sku:pm.get(d.product_id)?.sku||"",qty:d.quantity,precio:Number(d.precio_unitario),subtotal:Number(d.line_total)})),tracking:(tracking||[]).filter(t=>t.order_id===o.id).map(t=>({status:t.status,nota:t.note,fecha:t.created_at}))})));
   }
   async function loadAdmin(setProducts,setUsers,setOrders){
-    const [{data:ps,error:pe},{data:lots,error:le},{data:users,error:ue},{data:orders,error:oe},{data:suppliers,error:se}]=await Promise.all([
+    const [{data:ps,error:pe},{data:users,error:ue},{data:orders,error:oe},{data:lots,error:le},{data:suppliers,error:se}]=await Promise.all([
       sb.rpc("admin_list_products"),
-      sb.from("lots").select("id,product_id,supplier_id,lot_code,expiry_date,quantity_received,quantity_available,unit_cost,created_at"),
       sb.from("profiles").select("id,full_name,email,role,tipo_cliente,estado_cuenta,phone"),
       sb.from("orders").select("id,customer_id,status,subtotal,total,notes,created_at,updated_at").order("created_at",{ascending:false}),
-      sb.from("suppliers").select("id,name,phone,email,active")
+      sb.rpc("admin_list_lots"),
+      sb.rpc("admin_list_suppliers")
     ]);
-    if(pe)throw pe;if(le)throw le;if(ue)throw ue;if(oe)throw oe;if(se)throw se;
+    if(pe)throw pe;if(ue)throw ue;if(oe)throw oe;if(le)throw le;if(se)throw se;
     const sm=new Map((suppliers||[]).map(x=>[x.id,x.name]));
     const byProduct=new Map();
     (lots||[]).forEach(l=>{let a=byProduct.get(l.product_id)||{stock:0,vence:null,proveedor:"",costo:l.unit_cost};a.stock+=Number(l.quantity_available||0);if(l.expiry_date&&(!a.vence||l.expiry_date<a.vence))a.vence=l.expiry_date;a.proveedor=sm.get(l.supplier_id)||a.proveedor;a.costo=Number(l.unit_cost||a.costo||0);byProduct.set(l.product_id,a);});
@@ -83,7 +83,7 @@
     async createSale(){throw new Error("La venta POS requiere una función transaccional específica; create_sale_atomic no existe en THOP-TEST y no se simulará con un pedido de cliente.");},
     async updateOrderStatus(id,status){const {data,error}=await sb.rpc("admin_update_order_status",{p_order_id:id,p_status:status,p_note:"Actualizado por administrador"});if(error)throw error;return data;},
     async setCustomerType(id,tipo){const {error}=await sb.rpc("admin_update_customer_type",{p_customer_id:id,p_tipo:tipo});if(error)throw error;},
-    async setSpecialPrices(customerId,prices){const {error:del}=await sb.from("special_prices").delete().eq("customer_id",customerId);if(del)throw del;const rows=Object.entries(prices).map(([product_id,price])=>({customer_id:customerId,product_id,price:Number(price)}));if(rows.length){const {error}=await sb.from("special_prices").insert(rows);if(error)throw error;}},
+    async setSpecialPrices(){throw new Error("Los precios especiales requieren una RPC transaccional de administración; no se escribirá directamente en la tabla.");},
     async updateProduct(p){const {data,error}=await sb.rpc("admin_update_product",{p_product_id:p.id,p_sku:p.sku,p_name:p.nombre,p_description:p.descripcion||"",p_image_url:p.imagen||p.image_url||"",p_public_price:Number(p.precioPublico),p_retail_price:Number(p.precioGymBase??p.precioMinorista),p_wholesale_price:Number(p.precioDistBase??p.precioMayorista),p_cost:Number(p.costo),p_active:!p.oculto,p_visible_catalog:!p.oculto});if(error)throw error;return data;},
     async createProduct(){throw new Error("La creación de productos aún no está implementada en THOP-TEST; no se guardará un producto ficticio.");},
     async deleteProduct(id){const {data,error}=await sb.rpc("admin_set_product_visibility",{p_product_id:id,p_active:false,p_visible_catalog:false});if(error)throw error;return data;},
