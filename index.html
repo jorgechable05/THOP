@@ -46,7 +46,7 @@
   }
   async function loadAdmin(setProducts,setUsers,setOrders){
     const [{data:ps,error:pe},{data:lots,error:le},{data:users,error:ue},{data:orders,error:oe},{data:suppliers,error:se}]=await Promise.all([
-      sb.from("products").select("id,category_id,sku,barcode,name,brand,description,image_url,precio_publico,precio_minorista,precio_mayorista,cost,active,visible_catalog"),
+      sb.rpc("admin_list_products"),
       sb.from("lots").select("id,product_id,supplier_id,lot_code,expiry_date,quantity_received,quantity_available,unit_cost,created_at"),
       sb.from("profiles").select("id,full_name,email,role,tipo_cliente,estado_cuenta,phone"),
       sb.from("orders").select("id,customer_id,status,subtotal,total,notes,created_at,updated_at").order("created_at",{ascending:false}),
