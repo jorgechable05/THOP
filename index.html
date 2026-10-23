@@ -18,10 +18,12 @@
   const mapProduct=p=>({id:p.id,sku:p.sku,nombre:p.name,descripcion:p.description||"",marca:p.brand||"THOP",categoria:p.category_id||"General",imagen:p.image_url||"",precio:Number(p.effective_price||0),precioPublico:Number(p.effective_price||0),precioMinorista:Number(p.effective_price||0),precioMayorista:Number(p.effective_price||0),costo:0,stock:999999,stockMin:0,vence:null,proveedor:"",oculto:false});
   async function profile(session){
     if(!session?.user) return null;
-    const {data,error}=await sb.from("profiles").select("id,full_name,phone,email,address,role,tipo_cliente,estado_cuenta").eq("id",session.user.id).maybeSingle();
+    const {data,error}=await sb.rpc("current_profile");
     if(error) throw error;
     if(!data) return null;
-    return {id:data.id,email:data.email||session.user.email,nombre:data.full_name||session.user.email,tipo:data.tipo_cliente,role:data.role,estado:data.estado_cuenta,telefono:data.phone,direccion:data.address,customPrices:{}};
+    const p=Array.isArray(data)?data[0]:data;
+    if(!p) return null;
+    return {id:p.id,email:p.email||session.user.email,nombre:p.full_name||session.user.email,tipo:p.tipo_cliente,role:p.role,estado:p.estado_cuenta,telefono:p.phone,direccion:p.address,customPrices:{}};
   }
   async function loadCatalog(setProducts){
     const {data,error}=await sb.from("catalog_products").select("id,sku,barcode,name,brand,description,image_url,category_id,effective_price").order("name");
