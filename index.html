@@ -47,12 +47,13 @@
     setOrders((orders||[]).map(o=>({id:o.id,folio:"THOP-"+o.id.slice(0,8).toUpperCase(),userId:o.customer_id,userEmail:user.email,total:Number(o.total),subtotal:Number(o.subtotal),estado:o.status,fecha:o.created_at,notes:o.notes,paymentMethod:"",items:(details||[]).filter(d=>d.order_id===o.id).map(d=>({productId:d.product_id,nombre:pm.get(d.product_id)?.name||"Producto",sku:pm.get(d.product_id)?.sku||"",qty:d.quantity,precio:Number(d.precio_unitario),subtotal:Number(d.line_total)})),tracking:(tracking||[]).filter(t=>t.order_id===o.id).map(t=>({status:t.status,nota:t.note,fecha:t.created_at}))})));
   }
   async function loadAdmin(setProducts,setUsers,setOrders){
+    const {data:{user},error}=await sb.auth.getUser();if(error)throw error;
+    if(!user)throw new Error("AUTH_REQUIRED");
+    const {data:me,error:meError}=await sb.rpc("current_profile");if(meError)throw meError;
+    const current=Array.isArray(me)?me[0]:me;
+    if(current?.role!=="ADMIN")throw new Error("ADMIN_REQUIRED");
     const [{data:ps,error:pe},{data:users,error:ue},{data:orders,error:oe},{data:inventory,error:ie},{data:suppliers,error:se}]=await Promise.all([
-      sb.rpc("admin_list_products"),
-      sb.rpc("admin_list_profiles"),
-      sb.rpc("admin_list_orders"),
-      sb.rpc("admin_list_inventory_summary"),
-      sb.rpc("admin_list_suppliers")
+      sb.rpc("admin_list_products"),sb.rpc("admin_list_profiles"),sb.rpc("admin_list_orders"),sb.rpc("admin_list_inventory_summary"),sb.rpc("admin_list_suppliers")
     ]);
     if(pe)throw pe;if(ue)throw ue;if(oe)throw oe;if(ie)throw ie;if(se)throw se;
     const im=new Map((inventory||[]).map(x=>[x.product_id,x]));
