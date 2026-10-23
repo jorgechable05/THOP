@@ -86,6 +86,7 @@
     async updateOrderStatus(id,status){const {data,error}=await sb.rpc("admin_update_order_status",{p_order_id:id,p_status:status,p_note:"Actualizado por administrador"});if(error)throw error;return data;},
     async setCustomerType(id,tipo){const {error}=await sb.rpc("admin_update_customer_type",{p_customer_id:id,p_tipo:tipo});if(error)throw error;},
     async setSpecialPrices(customerId,prices){const {data,error}=await sb.rpc("admin_update_special_prices",{p_customer_id:customerId,p_prices:prices});if(error)throw error;return data;},
+    async loadSpecialPrices(customerId){const {data,error}=await sb.rpc("admin_list_special_prices",{p_customer_id:customerId});if(error)throw error;return data||{};},
     async updateProduct(p){const {data,error}=await sb.rpc("admin_update_product",{p_product_id:p.id,p_sku:p.sku,p_name:p.nombre,p_description:p.descripcion||"",p_image_url:p.imagen||p.image_url||"",p_public_price:Number(p.precioPublico),p_retail_price:Number(p.precioGymBase??p.precioMinorista),p_wholesale_price:Number(p.precioDistBase??p.precioMayorista),p_cost:Number(p.costo),p_active:!p.oculto,p_visible_catalog:!p.oculto});if(error)throw error;return data;},
     async createProduct(){throw new Error("La creación de productos aún no está implementada en THOP-TEST; no se guardará un producto ficticio.");},
     async deleteProduct(id){const {data,error}=await sb.rpc("admin_set_product_visibility",{p_product_id:id,p_active:false,p_visible_catalog:false});if(error)throw error;return data;},
