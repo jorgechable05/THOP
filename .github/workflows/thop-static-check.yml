@@ -1,0 +1,23 @@
+name: THOP static integration checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "dev/**"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check authenticated runner syntax
+        run: node --check qa/thop-test-authenticated.mjs
+      - name: Check frontend syntax and integration contracts
+        run: node qa/check-thop-static.mjs
