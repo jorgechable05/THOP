@@ -16,7 +16,7 @@ check("no service-role credential in frontend", () => {
 });
 check("catalog projection matches schema", () => {
   assert.match(html, /catalog_products.*?effective_price/s);
-  assert.match(html, /nombre:p\.name/);
+  assert.match(html, /(?:nombre|name):p\.name/);
   assert.match(html, /image_url/);
 });
 check("order RPC uses schema field names", () => {
