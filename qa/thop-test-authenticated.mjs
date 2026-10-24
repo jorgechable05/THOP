@@ -31,6 +31,7 @@ function requireEnv() {
   })) if (!v) missing.push(k);
   if (missing.length) throw new Error(`Missing required GitHub environment secrets: ${missing.join(", ")}`);
   if (!/^https:\/\//i.test(baseUrl)) throw new Error("SUPABASE_URL must be an HTTPS URL");
+  if (adminEmail.trim().toLowerCase() === clientEmail.trim().toLowerCase()) throw new Error("Admin and synthetic client must use different email addresses");
 }
 async function request(path, { method = "GET", token = "", body, query = "" } = {}) {
   const response = await fetch(`${baseUrl}${path}${query}`, {
@@ -143,8 +144,8 @@ async function run() {
     ]) {
       const r = await request(`/rest/v1/${table}`, { token: clientToken, query: "?select=*&limit=1" });
       const rowsVisible = r.ok && Array.isArray(r.data) && r.data.length > 0;
-      record(id, label, !r.ok || (r.ok && Array.isArray(r.data) && r.data.length === 0) ? "PASS" : "FAIL",
-        !r.ok ? `Request rejected with HTTP ${r.status}` : rowsVisible ? "Rows returned to client" : "No rows returned; verify RLS and grants before final certification");
+      record(id, label, !r.ok ? "PASS" : rowsVisible ? "FAIL" : "INCONCLUSIVE",
+        !r.ok ? `Request rejected with HTTP ${r.status}` : rowsVisible ? "Rows returned to client" : "Empty result does not prove isolation; add synthetic data and verify policy behavior");
     }
   } else {
     for (const [id,name] of [
@@ -167,7 +168,7 @@ async function run() {
   };
   await mkdir("qa-results", { recursive: true });
   await writeFile("qa-results/thop-test-report.json", JSON.stringify(summary, null, 2) + "\n");
-  if (results.some(x => x.status === "FAIL")) process.exitCode = 1;
+  if (results.some(x => ["FAIL", "INCONCLUSIVE", "BLOCKED"].includes(x.status))) process.exitCode = 1;
 }
 try {
   await run();
