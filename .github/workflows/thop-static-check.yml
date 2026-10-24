@@ -17,5 +17,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - name: Check authenticated runner syntax
+        run: node --check qa/thop-test-authenticated.mjs
       - name: Check frontend syntax and integration contracts
         run: node qa/check-thop-static.mjs
