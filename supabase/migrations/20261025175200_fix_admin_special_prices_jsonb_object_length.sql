@@ -49,7 +49,7 @@ begin
     v_product_id := (v_item->>'product_id')::uuid;
     v_price := (v_item->>'price')::numeric;
     insert into public.special_prices(customer_id, product_id, price, starts_at, ends_at)
-    values(v_uid, p_customer_id, v_price, now(), null);
+    values(p_customer_id, v_product_id, v_price, now(), null);
   end loop;
 
   insert into public.audit_log(actor_id, action, entity_type, entity_id, details)
