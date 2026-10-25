@@ -37,9 +37,12 @@ check("customer view does not expose stock states", () => {
   assert.match(html, /i\?\.role==="ADMIN"/);
   assert.match(html, /Registro como Público • Activación por administrador/);
 });
-check("25-case matrix has 25 pending cases", () => {
-  const pending = (matrix.match(/\| PENDIENTE \|/g) || []).length;
-  assert.equal(pending, 25);
+check("25-case matrix has 25 defined cases and valid statuses", () => {
+  const lines = matrix.split(/\r?\n/).filter((line) => /^\|\s*\d+\s*\|/.test(line));
+  assert.equal(lines.length, 25, "acceptance matrix must contain exactly 25 numbered cases");
+  for (const line of lines) {
+    assert.match(line, /\|\s*(?:APROBADO|PENDIENTE|FALLIDO)\s*\|\s*$/, `invalid result status: ${line}`);
+  }
 });
 check("all inline JavaScript parses", () => {
   const tags = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
