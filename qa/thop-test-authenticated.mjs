@@ -116,41 +116,42 @@ async function run() {
     record("AUTH-01", "Administrator sign-in/profile", "BLOCKED", String(e.message || e).slice(0,240));
   }
 
-  // Register the synthetic client if requested. Preserve the signup outcome so a
-  // missing session (commonly email confirmation) is not hidden by a misleading login error.
+  // Provision the one fixed synthetic client via a test-project Edge Function. The
+  // function verifies this independent ADMIN session and uses Supabase Auth Admin API
+  // server-side, so email SMTP limits do not block disposable QA identity creation.
   try {
-    let session;
+    let session = null;
     if (createClientIfMissing) {
-      const signup = await request("/auth/v1/signup", {
-        method: "POST",
-        body: { email: clientEmail, password: clientPassword, data: { full_name: "THOP QA synthetic client" } },
-      });
-      if (signup.ok && signup.data?.access_token) {
-        session = { token: signup.data.access_token, user: signup.data.user };
+      if (!adminToken) {
+        record("AUTH-02", "Client bootstrap", "BLOCKED", "Administrator session is required to provision the synthetic client");
       } else {
-        const candidateId = signup?.data?.user?.id;
-        const signupIssue = signup.ok
-          ? `Signup accepted but no access token was issued; email confirmation may be required${candidateId ? `; user_id=${candidateId}` : ""}`
-          : safeError(signup);
-        const maybeExisting = /already registered|already exists|user already/i.test(
-          String(signup?.data?.msg || signup?.data?.message || signup?.data?.error_description || "")
-        );
-        if (!maybeExisting) {
-          record("AUTH-02", "Client registration", "BLOCKED", signupIssue);
-          session = null;
+        const provision = await request("/functions/v1/thop-qa-bootstrap-client", {
+          method: "POST",
+          token: adminToken,
+          body: { password: clientPassword },
+        });
+        if (!provision.ok || provision.data?.ok !== true) {
+          record("AUTH-02", "Client bootstrap", "BLOCKED",
+            `QA Auth Admin bootstrap failed: ${safeError(provision)}`);
         } else {
+          const candidate = provision.data?.user_id;
+          record("AUTH-02", "Client bootstrap", "PASS",
+            `Fixed synthetic client is provisioned in THOP-TEST; created=${String(provision.data.created)}${candidate ? `; user_id=${candidate}` : ""}`);
           try {
             session = await signIn(clientEmail, clientPassword);
-          } catch (loginError) {
-            record("AUTH-02", "Client signup/sign-in", "BLOCKED",
-              `Signup indicates existing account (${signupIssue}); sign-in: ${String(loginError.message || loginError).slice(0,160)}`);
-            session = null;
+          } catch (e) {
+            record("AUTH-02", "Client sign-in after bootstrap", "BLOCKED", String(e.message || e).slice(0,240));
           }
         }
       }
     } else {
-      session = await signIn(clientEmail, clientPassword);
+      try {
+        session = await signIn(clientEmail, clientPassword);
+      } catch (e) {
+        record("AUTH-02", "Client sign-in", "BLOCKED", String(e.message || e).slice(0,240));
+      }
     }
+
     if (session?.token) {
       clientToken = session.token;
       const p = await getProfile(clientToken);
@@ -169,7 +170,7 @@ async function run() {
       }
     }
   } catch (e) {
-    record("AUTH-02", "Client registration/sign-in", "BLOCKED", String(e.message || e).slice(0,240));
+    record("AUTH-02", "Client bootstrap/sign-in", "BLOCKED", String(e.message || e).slice(0,240));
   }
 
   if (adminToken) {
