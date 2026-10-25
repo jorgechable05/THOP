@@ -1,5 +1,5 @@
 name: THOP-TEST authenticated acceptance
-# The push path is restricted to this test branch and an explicit QA-trigger commit marker.
+# The push path is restricted to this test branch and an explicit QA-trigger commit marker. QA bootstrap run retries only the fixed synthetic client after Auth's minimum-length check was aligned.
 on:
   push:
     branches:
