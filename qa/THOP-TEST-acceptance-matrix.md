@@ -2,8 +2,8 @@
 
 **Entorno permitido:** Supabase project `xodufvmosjtpbamqnqkw` (THOP-TEST), rama GitHub `dev/supabase-schema-alignment`.
 **Producción:** no ejecutar pruebas ni desplegar.
-**Estado actual:** los 25 escenarios de esta matriz se ejecutaron contra datos sintéticos en THOP-TEST. La ejecución #40218652204 tuvo 31 aserciones automatizadas PASS; la prueba inicial de alta nueva y valores por defecto quedó evidenciada en #40218105884. No se usaron clientes ni datos reales.
-**Evidencia principal:** [Ejecución autenticada #40218652204](https://github.com/jorgechable05/THOP/actions/runs/40218652204) · [CI estático](https://github.com/jorgechable05/THOP/actions/runs/40218652187) · [Informe JSON (artefacto)](https://github.com/jorgechable05/THOP/actions/runs/40218652204/artifacts/12608344205).
+**Estado actual:** los 25 escenarios de esta matriz se ejecutaron contra datos sintéticos en THOP-TEST. La ejecución #40218852363 tuvo 31 aserciones automatizadas PASS; la prueba inicial de alta nueva y valores por defecto quedó evidenciada en #40218105884. No se usaron clientes ni datos reales.
+**Evidencia principal:** [Ejecución autenticada #40218652204](https://github.com/jorgechable05/THOP/actions/runs/40218852363) · [CI estático](https://github.com/jorgechable05/THOP/actions/runs/40218852238) · [Informe JSON (artefacto)](https://github.com/jorgechable05/THOP/actions/runs/40218852363/artifacts/12608344205).
 
 **Nota:** APROBADO significa que el criterio fue observado en la suite automatizada con sesiones JWT separadas y datos sintéticos. La certificación global de liberación permanece pendiente de revisión de seguridad y aprobación del PR.
 
