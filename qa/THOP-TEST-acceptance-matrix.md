@@ -52,3 +52,31 @@
 - Los productos, lotes, compras y pedidos de esta ejecución están identificados con el prefijo THOP-QA y pertenecen al entorno de pruebas.
 - La suite prueba las rutas de base de datos/RPC y las restricciones de permisos. No sustituye revisión independiente de reglas de negocio no incluidas en la matriz, pruebas de interfaz de usuario ni aprobación de liberación.
 - La certificación global permanece pendiente hasta revisar las alertas del asesor de seguridad de Supabase y aprobar deliberadamente el PR.
+
+
+## Revisión de seguridad adicional — 2026-10-25
+
+**Entorno:** solo THOP-TEST (`xodufvmosjtpbamqnqkw`). No se modificó producción.
+
+### Hallazgos del Security Advisor
+
+- `authenticated_security_definer_function_executable`: 16 funciones en el esquema expuesto `public` tienen `SECURITY DEFINER` y pueden ejecutarse por usuarios autenticados. El aviso es de revisión de exposición, no prueba por sí solo un bypass de autorización.
+- `auth_leaked_password_protection`: Supabase Auth indica que la protección de contraseñas filtradas está deshabilitada. Esta opción debe habilitarse desde la configuración de Auth del panel del proyecto; no se afirma que esté habilitada.
+
+### Resultados de inspección SQL
+
+- Las funciones administrativas revisadas (`admin_list_inventory_summary`, `admin_list_lots`, `admin_list_orders`, `admin_list_products`, `admin_list_profiles`, `admin_list_special_prices`, `admin_list_suppliers`, `admin_set_product_visibility`, `admin_update_customer_type`, `admin_update_order_status`, `admin_update_product`, `admin_update_special_prices` y `receive_purchase_atomic`) fijan `search_path` y validan usuario autenticado/administrador con `private.is_admin()` antes de leer o modificar datos administrativos.
+- `catalog_price` requiere usuario autenticado, cuenta activa y producto publicado; calcula el precio por tipo de cliente y precio especial. Es una RPC del flujo de catálogo/pedido y no debe revocarse sin reemplazar el contrato y repetir aceptación.
+- `create_order_atomic` exige usuario autenticado con perfil CLIENTE activo y crea pedido/transacciones de inventario de forma atómica. Debe seguir disponible para clientes; no se debe quitar `EXECUTE` indiscriminadamente.
+- `current_profile` exige una identidad autenticada y devuelve únicamente el perfil cuyo id coincide con `auth.uid()`.
+- Las funciones auxiliares de trigger `guard_profile_privileges` y `handle_new_user` no son ejecutables por `authenticated` en la ACL observada; `private_is_admin` tampoco tiene ejecución directa concedida a ese rol. La función privada `private.is_admin()` sí figura en el esquema `private` y no debe exponerse por una revocación/cambio indiscriminado.
+- Todas las funciones `SECURITY DEFINER` observadas tenían un `search_path` explícito. Se requiere mantenerlo y revisar de forma manual el contrato de cada función antes de cualquier cambio de permisos.
+- No se aplicaron cambios de DDL ni se modificaron ACL durante esta inspección; no se ocultaron avisos cambiando RLS.
+
+### Cierre pendiente
+
+1. Habilitar la protección contra contraseñas filtradas en **Authentication → Settings / Password Security** del panel de THOP-TEST y volver a ejecutar Security Advisor.
+2. Ejecutar pruebas negativas de JWT de cliente sobre cada RPC administrativa y confirmar que la suite de pedidos/catálogo sigue pasando antes de alterar cualquier permiso.
+3. Después de cualquier corrección, volver a ejecutar la suite autenticada y CI estático, guardar evidencia nueva y revisar el Advisor otra vez.
+
+**Estado:** aceptación funcional automatizada aprobada según las ejecuciones enlazadas arriba; revisión de seguridad incompleta y liberación no certificada. PR #1 continúa abierto y sin fusionar.
