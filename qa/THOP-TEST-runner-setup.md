@@ -13,14 +13,16 @@ El flujo `.github/workflows/thop-test-authenticated.yml` es manual y solo debe e
    - `THOP_TEST_CLIENT_EMAIL`: correo reservado para un usuario sintético de pruebas, distinto del administrador y de clientes reales.
    - `THOP_TEST_CLIENT_PASSWORD`: contraseña temporal exclusiva para la cuenta sintética.
 3. No uses una clave `service_role` o `sb_secret_*`. No pongas credenciales en el repositorio, en los inputs del workflow ni en los informes.
-4. Si Supabase exige confirmación por correo al registrar usuarios, crea/verifica el usuario sintético según la configuración de Auth de THOP-TEST antes de ejecutar, o usa el modo de registro permitido por el proyecto de pruebas. No desactives protecciones de producción.
+4. El proyecto de pruebas debe estar realmente vacío o usar correos sintéticos nuevos. El runner valida que SUPABASE_URL sea exactamente el proyecto THOP-TEST autorizado.
+5. Si Supabase exige confirmación por correo al registrar usuarios, confirma esas cuentas de prueba antes de repetir la validación. No desactives protecciones de producción.
 
 ## Ejecutar
 
 1. Abre **Actions → THOP-TEST authenticated acceptance → Run workflow**.
 2. Selecciona la rama `dev/supabase-schema-alignment`.
-3. Deja activada la opción de registrar al cliente sintético si debe crearse por primera vez. Si ya existe y su contraseña corresponde al secreto configurado, el runner intentará iniciar sesión cuando el registro no entregue una sesión.
-4. Revisa el log y descarga el artefacto `thop-test-acceptance-report`.
+3. Para credenciales nuevas, usa correos sintéticos distintos y contraseñas temporales exclusivas de QA. Activa `create_client_if_missing` y `create_admin_if_missing`. El signup del candidato de administrador crea deliberadamente un perfil CLIENTE; **no lo eleva automáticamente**. Después de confirmar la cuenta y revisar el ID generado, un operador autorizado debe promover solo ese perfil sintético a ADMIN dentro de THOP-TEST.
+4. El runner distingue entre un registro aceptado sin sesión (posible confirmación de correo), errores de registro y errores de inicio de sesión. Nunca añadas contraseñas al repositorio ni al reporte.
+5. Revisa el log y descarga el artefacto `thop-test-acceptance-report`.
 
 ## Alcance y límites
 
