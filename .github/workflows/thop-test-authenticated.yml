@@ -1,5 +1,5 @@
 name: THOP-TEST authenticated acceptance
-# The push path is restricted to this test branch and an explicit QA-trigger commit marker. Expanded seeded integration cases are enabled for the next THOP-TEST-only run.
+# The push path is restricted to this test branch and an explicit QA-trigger commit marker. The runner uses the admin-only synthetic snapshot endpoint and fixed THOP-TEST fixtures.
 on:
   push:
     branches:
