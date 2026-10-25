@@ -269,9 +269,15 @@ async function run() {
       const r = await request("/rest/v1/lots", { token: activeClientToken, query });
       record(id, label, !r.ok ? "PASS" : "FAIL", !r.ok ? `Request rejected with HTTP ${r.status}` : "Client was allowed to read lot information");
     }
-    const profiles = await request("/rest/v1/profiles", { token: activeClientToken, query: "?select=id,email&limit=1" });
-    record("SEC-03", "Client cannot list profiles", !profiles.ok ? "PASS" : (Array.isArray(profiles.data) && profiles.data.length === 0 ? "INCONCLUSIVE" : "FAIL"),
-      !profiles.ok ? `Request rejected with HTTP ${profiles.status}` : "Profiles endpoint did not prove isolation");
+    const profiles = await request("/rest/v1/profiles", {
+      token: activeClientToken,
+      query: `?select=id,email&id=neq.${activeClientProfile.id}&limit=100`,
+    });
+    record("SEC-03", "Client cannot list other profiles",
+      !profiles.ok || (Array.isArray(profiles.data) && profiles.data.length === 0) ? "PASS" : "FAIL",
+      !profiles.ok ? `Request rejected with HTTP ${profiles.status}` :
+        Array.isArray(profiles.data) && profiles.data.length === 0 ? "RLS filtered out every profile other than the active client" :
+        `Other profile rows were exposed: ${Array.isArray(profiles.data) ? profiles.data.length : "unparsed"}`);
     const adminOnlyRpc = await rpc(activeClientToken, "admin_list_profiles");
     record("ACC-20B", "Client denied administrative profile report", !adminOnlyRpc.ok ? "PASS" : "FAIL",
       !adminOnlyRpc.ok ? `Denied with HTTP ${adminOnlyRpc.status}` : "Client unexpectedly invoked administrative profile report");
@@ -321,9 +327,11 @@ async function run() {
       body: { name: "THOP QA unauthorized product edit" },
     }) : { ok: false, status: 0, data: null };
     const productMutation = editProduct.ok && Array.isArray(editProduct.data) && editProduct.data.length > 0;
-    assertResult("ACC-22", "Client cannot modify product", !productMutation,
+    const productReadback = productId ? await rows(adminToken, "products", `?select=id,name& id=eq.${productId}`.replace("& ", "&")) : [];
+    const productUnchanged = productReadback[0]?.name === "THOP QA Standard Product";
+    assertResult("ACC-22", "Client cannot modify product", !productMutation && productUnchanged,
       `No product row was changed (HTTP ${editProduct.status})`,
-      "Client received a representation of a modified product");
+      `mutation response=${editProduct.ok ? JSON.stringify(editProduct.data) : safeError(editProduct)}; product name=${String(productReadback[0]?.name)}`);
   } else {
     for (const [id,name] of [
       ["AUTH-04","Client denied admin_list_products"], ["SEC-01","Client cannot read sensitive columns"],
