@@ -7,6 +7,7 @@ const adminPassword = process.env.ADMIN_PASSWORD || "";
 const clientEmail = process.env.CLIENT_EMAIL || "";
 const clientPassword = process.env.CLIENT_PASSWORD || "";
 const createClientIfMissing = process.env.CREATE_CLIENT_IF_MISSING === "true";
+const createAdminIfMissing = process.env.CREATE_ADMIN_IF_MISSING === "true";
 
 const results = [];
 const startedAt = new Date().toISOString();
@@ -69,18 +70,43 @@ async function rpc(token, name, body = {}) {
 async function run() {
   requireEnv();
 
-  // Administrator session is independently authenticated through Supabase Auth.
+  // Administrator session is independently authenticated. If opted in, attempt signup
+  // for a fresh QA-only identity when login fails; signup defaults to CLIENTE and must
+  // never be treated as administrator provisioning.
   try {
-    const session = await signIn(adminEmail, adminPassword);
-    adminToken = session.token;
-    const p = await getProfile(adminToken);
-    if (!p.ok) {
-      record("AUTH-01", "Administrator current_profile", "FAIL", safeError(p));
-    } else {
-      adminProfile = p.data;
-      const role = Array.isArray(adminProfile) ? adminProfile[0]?.role : adminProfile?.role;
-      if (role === "ADMIN") record("AUTH-01", "Administrator role", "PASS", "Authenticated session reports ADMIN");
-      else record("AUTH-01", "Administrator role", "FAIL", `Expected ADMIN role; observed ${String(role ?? "missing")}`);
+    let session;
+    try {
+      session = await signIn(adminEmail, adminPassword);
+    } catch (loginError) {
+      if (!createAdminIfMissing) throw loginError;
+      const signup = await request("/auth/v1/signup", {
+        method: "POST",
+        body: { email: adminEmail, password: adminPassword, data: { full_name: "THOP QA synthetic administrator candidate" } },
+      });
+      const candidateId = signup?.data?.user?.id;
+      if (signup.ok) {
+        const note = signup.data?.access_token
+          ? "Signup succeeded but trigger-created profile defaults to CLIENTE; explicit test-admin promotion is still required"
+          : "Signup accepted without access token; confirm the test email, then promote only this synthetic profile to ADMIN";
+        record("AUTH-01", "Administrator bootstrap candidate", "BLOCKED",
+          `${note}${candidateId ? `; user_id=${candidateId}` : ""}`);
+      } else {
+        record("AUTH-01", "Administrator sign-in/bootstrap", "BLOCKED",
+          `Sign-in: ${String(loginError.message || loginError).slice(0,120)}; signup: ${safeError(signup)}`);
+      }
+      session = null;
+    }
+    if (session?.token) {
+      adminToken = session.token;
+      const p = await getProfile(adminToken);
+      if (!p.ok) {
+        record("AUTH-01", "Administrator current_profile", "FAIL", safeError(p));
+      } else {
+        adminProfile = p.data;
+        const role = Array.isArray(adminProfile) ? adminProfile[0]?.role : adminProfile?.role;
+        if (role === "ADMIN") record("AUTH-01", "Administrator role", "PASS", "Authenticated session reports ADMIN");
+        else record("AUTH-01", "Administrator role", "FAIL", `Expected ADMIN role; observed ${String(role ?? "missing")}`);
+      }
     }
   } catch (e) {
     record("AUTH-01", "Administrator sign-in/profile", "BLOCKED", String(e.message || e).slice(0,240));
@@ -98,8 +124,9 @@ async function run() {
       if (signup.ok && signup.data?.access_token) {
         session = { token: signup.data.access_token, user: signup.data.user };
       } else {
+        const candidateId = signup?.data?.user?.id;
         const signupIssue = signup.ok
-          ? "Signup accepted but no access token was issued; email confirmation may be required"
+          ? `Signup accepted but no access token was issued; email confirmation may be required${candidateId ? `; user_id=${candidateId}` : ""}`
           : safeError(signup);
         const maybeExisting = /already registered|already exists|user already/i.test(
           String(signup?.data?.msg || signup?.data?.message || signup?.data?.error_description || "")
