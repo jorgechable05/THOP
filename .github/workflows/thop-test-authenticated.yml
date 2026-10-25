@@ -41,9 +41,9 @@ jobs:
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.THOP_TEST_SUPABASE_PUBLISHABLE_KEY }}
           ADMIN_EMAIL: ${{ secrets.THOP_TEST_ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.THOP_TEST_ADMIN_PASSWORD }}
-          CLIENT_EMAIL: ${{ (((github.event_name == 'push' && contains(github.event.head_commit.message, '[run-thop-test-auth]')) || inputs.create_client_if_missing) && 'thop-qa-client@example.com') || secrets.THOP_TEST_CLIENT_EMAIL }}
+          CLIENT_EMAIL: ${{ (((github.event_name == 'push' && contains(github.event.head_commit.message, '[bootstrap-client]')) || inputs.create_client_if_missing) && 'thop-qa-client@example.com') || secrets.THOP_TEST_CLIENT_EMAIL }}
           CLIENT_PASSWORD: ${{ secrets.THOP_TEST_CLIENT_PASSWORD }}
-          CREATE_CLIENT_IF_MISSING: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[run-thop-test-auth]') || inputs.create_client_if_missing }}
+          CREATE_CLIENT_IF_MISSING: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[bootstrap-client]') || inputs.create_client_if_missing }}
           CREATE_ADMIN_IF_MISSING: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[run-thop-test-auth]') || inputs.create_admin_if_missing }}
         run: node qa/thop-test-authenticated.mjs
       - name: Upload sanitized report
