@@ -7,6 +7,11 @@ on:
         required: true
         type: boolean
         default: true
+      create_admin_if_missing:
+        description: "Attempt signup for a fresh QA-only admin candidate if login fails (candidate remains CLIENTE until explicitly promoted)"
+        required: true
+        type: boolean
+        default: true
 permissions:
   contents: read
   actions: read
@@ -33,6 +38,7 @@ jobs:
           CLIENT_EMAIL: ${{ secrets.THOP_TEST_CLIENT_EMAIL }}
           CLIENT_PASSWORD: ${{ secrets.THOP_TEST_CLIENT_PASSWORD }}
           CREATE_CLIENT_IF_MISSING: ${{ inputs.create_client_if_missing }}
+          CREATE_ADMIN_IF_MISSING: ${{ inputs.create_admin_if_missing }}
         run: node qa/thop-test-authenticated.mjs
       - name: Upload sanitized report
         if: always()
