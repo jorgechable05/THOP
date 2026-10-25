@@ -91,6 +91,15 @@ async function rows(token, name, query = "?select=*") {
 async function countRows(token, name, query = "?select=id") {
   return (await rows(token, name, query)).length;
 }
+async function getSnapshot() {
+  const r = await request("/functions/v1/thop-qa-bootstrap-client", {
+    method: "POST", token: adminToken, body: { action: "snapshot" },
+  });
+  if (!r.ok || r.data?.ok !== true || !r.data?.snapshot) {
+    throw new Error(`QA snapshot: ${safeError(r)}`);
+  }
+  return r.data.snapshot;
+}
 function obj(data) {
   return Array.isArray(data) ? data[0] : data;
 }
@@ -108,12 +117,12 @@ function qaNotes(label) {
   return `${qaPrefix}${label}]`;
 }
 async function qaOrders() {
-  const all = await rows(activeClientToken || adminToken, "orders", "?select=id,notes,status,total,subtotal,customer_id&limit=1000");
-  return all.filter((o) => o.customer_id === activeClientProfile?.id && typeof o.notes === "string" && o.notes.startsWith(qaPrefix));
+  const snap = await getSnapshot();
+  return snap.orders || [];
 }
 async function lotByCode(code) {
-  const found = await rows(adminToken, "lots", `?select=id,lot_code,quantity_received,quantity_available,expiry_date,unit_cost&lot_code=eq.${encodeURIComponent(code)}&limit=2`);
-  return found[0] || null;
+  const snap = await getSnapshot();
+  return (snap.lots || []).find((x) => x.lot_code === code) || null;
 }
 async function catalogPrice(productId) {
   const r = await rpc(activeClientToken, "catalog_price", { p_product_id: productId });
@@ -327,7 +336,8 @@ async function run() {
       body: { name: "THOP QA unauthorized product edit" },
     }) : { ok: false, status: 0, data: null };
     const productMutation = editProduct.ok && Array.isArray(editProduct.data) && editProduct.data.length > 0;
-    const productReadback = productId ? await rows(adminToken, "products", `?select=id,name& id=eq.${productId}`.replace("& ", "&")) : [];
+    const productSnapshot = await getSnapshot();
+    const productReadback = (productSnapshot.products || []).filter((p) => p.id === productId);
     const productUnchanged = productReadback[0]?.name === "THOP QA Standard Product";
     assertResult("ACC-22", "Client cannot modify product", !productMutation && productUnchanged,
       `No product row was changed (HTTP ${editProduct.status})`,
@@ -393,9 +403,10 @@ async function run() {
         p_notes: qaNotes("normal"),
       });
       const normalOrderId = normalOrder?.data?.order_id;
-      const normalDetails = normalOrderId ? await rows(activeClientToken, "order_details", `?select=id,order_id,product_id,quantity,precio_unitario&order_id=eq.${normalOrderId}`) : [];
-      const normalAfter = await lotByCode("THOP-QA-ORDER-LOT");
-      const tracking = normalOrderId ? await rows(activeClientToken, "order_tracking", `?select=id,order_id,status&order_id=eq.${normalOrderId}`) : [];
+      const normalSnap = await getSnapshot();
+      const normalDetails = normalOrderId ? (normalSnap.order_details || []).filter((x) => x.order_id === normalOrderId) : [];
+      const normalAfter = (normalSnap.lots || []).find((x) => x.lot_code === "THOP-QA-ORDER-LOT");
+      const tracking = normalOrderId ? (normalSnap.tracking || []).filter((x) => x.order_id === normalOrderId) : [];
       const normalOk = normalOrder.ok && normalOrderId && Number(normalOrder.data.total) === 20 &&
         normalDetails.length === 1 && Number(normalDetails[0].precio_unitario) === 10 &&
         tracking.some((x) => x.status === "RECIBIDO") &&
@@ -434,11 +445,12 @@ async function run() {
         `RPC=${lowOrder.ok ? "unexpected success" : safeError(lowOrder)}; stock ${lowBefore?.quantity_available}→${lowAfter?.quantity_available}; orders ${ordersBeforeLow.length}→${ordersAfterLow.length}`);
 
       // Case 15: a failure after the first valid purchase item must roll back every inserted row.
+      const rollbackSnapshotBefore = await getSnapshot();
       const beforePurchaseRollback = {
-        purchases: await countRows(adminToken, "purchases", "?select=id&limit=1000"),
-        details: await countRows(adminToken, "purchase_details", "?select=id&limit=1000"),
-        qaLots: await countRows(adminToken, "lots", "?select=id&lot_code=like.THOP-QA-%&limit=1000"),
-        movements: await countRows(adminToken, "inventory_movements", "?select=id&limit=1000"),
+        purchases: (rollbackSnapshotBefore.purchases || []).length,
+        details: (rollbackSnapshotBefore.purchase_details || []).length,
+        qaLots: (rollbackSnapshotBefore.lots || []).length,
+        movements: (rollbackSnapshotBefore.movements || []).length,
       };
       const rollbackPurchase = await rpc(adminToken, "receive_purchase_atomic", {
         p_supplier_id: supplierId,
@@ -447,11 +459,12 @@ async function run() {
           { product_id: "not-a-uuid", quantity: 1, unit_cost: "1.00", lot_code: "THOP-QA-ROLLBACK-INVALID", expiry_date: dateOffset(90) },
         ],
       });
+      const rollbackSnapshotAfter = await getSnapshot();
       const afterPurchaseRollback = {
-        purchases: await countRows(adminToken, "purchases", "?select=id&limit=1000"),
-        details: await countRows(adminToken, "purchase_details", "?select=id&limit=1000"),
-        qaLots: await countRows(adminToken, "lots", "?select=id&lot_code=like.THOP-QA-%&limit=1000"),
-        movements: await countRows(adminToken, "inventory_movements", "?select=id&limit=1000"),
+        purchases: (rollbackSnapshotAfter.purchases || []).length,
+        details: (rollbackSnapshotAfter.purchase_details || []).length,
+        qaLots: (rollbackSnapshotAfter.lots || []).length,
+        movements: (rollbackSnapshotAfter.movements || []).length,
       };
       const rollbackClean = !rollbackPurchase.ok &&
         JSON.stringify(beforePurchaseRollback) === JSON.stringify(afterPurchaseRollback);
@@ -466,10 +479,11 @@ async function run() {
         p_items: [{ product_id: purchaseProductId, quantity: 3, unit_cost: "4.20", lot_code: purchaseCode, expiry_date: dateOffset(120) }],
       });
       const purchaseId = receive?.data?.purchase_id;
-      const purchaseRows = purchaseId ? await rows(adminToken, "purchases", `?select=id,status,total& id=eq.${purchaseId}`.replace("& ", "&")) : [];
-      const purchaseDetails = purchaseId ? await rows(adminToken, "purchase_details", `?select=id,purchase_id,product_id,quantity,unit_cost,line_total,lot_code,expiry_date&purchase_id=eq.${purchaseId}`) : [];
-      const receivedLot = await rows(adminToken, "lots", `?select=id,product_id,lot_code,quantity_received,quantity_available,unit_cost,expiry_date&lot_code=eq.${encodeURIComponent(purchaseCode)}`);
-      const purchaseMovements = purchaseId ? await rows(adminToken, "inventory_movements", `?select=id,product_id,lot_id,movement_type,quantity,reference_type,reference_id&reference_id=eq.${purchaseId}`) : [];
+      const receiptSnapshot = await getSnapshot();
+      const purchaseRows = purchaseId ? (receiptSnapshot.purchases || []).filter((x) => x.id === purchaseId) : [];
+      const purchaseDetails = purchaseId ? (receiptSnapshot.purchase_details || []).filter((x) => x.purchase_id === purchaseId) : [];
+      const receivedLot = (receiptSnapshot.lots || []).filter((x) => x.lot_code === purchaseCode);
+      const purchaseMovements = purchaseId ? (receiptSnapshot.movements || []).filter((x) => x.reference_id === purchaseId) : [];
       const purchaseOk = receive.ok && purchaseRows[0]?.status === "RECIBIDA" &&
         Math.abs(Number(purchaseRows[0]?.total) - 12.6) < 0.001 &&
         purchaseDetails.length === 1 && Number(purchaseDetails[0].quantity) === 3 &&
@@ -486,8 +500,9 @@ async function run() {
 
       // Cases 16 & 17: subsequent price changes affect new orders, never rewrite historical snapshots.
       const historicOrderId = normalOrderId;
+      const beforeChangeSnapshot = await getSnapshot();
       const oldSnapshotBefore = historicOrderId
-        ? await rows(activeClientToken, "order_details", `?select=id,precio_unitario&order_id=eq.${historicOrderId}`)
+        ? (beforeChangeSnapshot.order_details || []).filter((x) => x.order_id === historicOrderId)
         : [];
       const updatePrice = await updateProduct(productId, { publicPrice: 12, retailPrice: 9, wholesalePrice: 7, cost: 4 });
       const priceAfterChange = await catalogPrice(productId);
@@ -496,9 +511,10 @@ async function run() {
         p_notes: qaNotes("after-price-change"),
       });
       const newOrderId = newOrder?.data?.order_id;
-      const newDetail = newOrderId ? await rows(activeClientToken, "order_details", `?select=id,precio_unitario&order_id=eq.${newOrderId}`) : [];
+      const afterChangeSnapshot = await getSnapshot();
+      const newDetail = newOrderId ? (afterChangeSnapshot.order_details || []).filter((x) => x.order_id === newOrderId) : [];
       const oldSnapshotAfter = historicOrderId
-        ? await rows(activeClientToken, "order_details", `?select=id,precio_unitario&order_id=eq.${historicOrderId}`)
+        ? (afterChangeSnapshot.order_details || []).filter((x) => x.order_id === historicOrderId)
         : [];
       assertResult("ACC-16", "Price update changes later catalog/orders", updatePrice.ok &&
         priceAfterChange.response.ok && Math.abs(priceAfterChange.price - 12) < 0.001 &&
