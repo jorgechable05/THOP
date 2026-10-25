@@ -1,5 +1,5 @@
 name: THOP-TEST authenticated acceptance
-# The push path is restricted to this test branch and an explicit QA-trigger commit marker. The runner uses the admin-only synthetic snapshot endpoint and fixed THOP-TEST fixtures.
+# The push path is restricted to this test branch and an explicit QA-trigger commit marker. Final static check is green; rerun the complete THOP-TEST acceptance suite on this exact branch head.
 on:
   push:
     branches:
