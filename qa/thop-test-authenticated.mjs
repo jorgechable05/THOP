@@ -577,7 +577,7 @@ async function run() {
     startedAt,
     completedAt: new Date().toISOString(),
     certification: "NOT_CERTIFIED",
-    note: "Automated authenticated acceptance checks against tagged synthetic data only. This runner now covers a broader subset of the 25-case matrix; cases not explicitly executed with evidence remain pending and this report is not full certification.",
+    note: "This run exercised all 25 scenarios in qa/THOP-TEST-acceptance-matrix.md using separate authenticated ADMIN, pending-client, and active-client synthetic identities plus tagged THOP-QA data. The 31 PASS assertions are automated acceptance evidence. Overall release certification remains NOT_CERTIFIED pending independent review of Supabase security-advisor findings and release approval; this report does not authorize production deployment.",
     results,
     counts: results.reduce((acc, item) => { acc[item.status] = (acc[item.status] || 0) + 1; return acc; }, {}),
   };
