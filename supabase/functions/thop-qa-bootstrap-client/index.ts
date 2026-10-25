@@ -62,11 +62,108 @@ Deno.serve(async (req: Request) => {
     return json({ error: "ADMIN_REQUIRED" }, 403);
   }
 
-  let payload: { password?: unknown };
+  let payload: { password?: unknown; action?: unknown };
   try { payload = await req.json(); }
   catch { return json({ error: "INVALID_JSON" }, 400); }
+
+  // Admin-only read of narrowly tagged synthetic QA data, never secrets or arbitrary table names.
+  if (payload.action === "snapshot") {
+    try {
+      const { data: activeProfile, error: activeProfileError } = await admin.from("profiles")
+        .select("id,role,tipo_cliente,estado_cuenta")
+        .eq("full_name", ACTIVE_CLIENT_NAME)
+        .maybeSingle();
+      failIf(activeProfileError, "QA_ACTIVE_PROFILE_SNAPSHOT_FAILED");
+      if (!activeProfile?.id) return json({ error: "QA_ACTIVE_CLIENT_NOT_FOUND" }, 500);
+
+      const { data: products, error: productError } = await admin.from("products")
+        .select("id,sku,name,precio_publico,precio_minorista,precio_mayorista,active,visible_catalog")
+        .like("sku", "THOP-QA-%");
+      failIf(productError, "QA_PRODUCT_SNAPSHOT_FAILED");
+
+      const { data: lots, error: lotError } = await admin.from("lots")
+        .select("id,product_id,lot_code,quantity_received,quantity_available,expiry_date,unit_cost")
+        .like("lot_code", "THOP-QA-%");
+      failIf(lotError, "QA_LOT_SNAPSHOT_FAILED");
+
+      const { data: orders, error: orderError } = await admin.from("orders")
+        .select("id,customer_id,status,subtotal,total,notes,created_at")
+        .eq("customer_id", activeProfile.id)
+        .like("notes", "[THOP-QA:%");
+      failIf(orderError, "QA_ORDER_SNAPSHOT_FAILED");
+      const orderIds = (orders || []).map((x) => x.id);
+      let orderDetails: Record<string, unknown>[] = [];
+      let tracking: Record<string, unknown>[] = [];
+      if (orderIds.length) {
+        const { data, error } = await admin.from("order_details")
+          .select("id,order_id,product_id,quantity,precio_unitario,line_total")
+          .in("order_id", orderIds);
+        failIf(error, "QA_ORDER_DETAIL_SNAPSHOT_FAILED");
+        orderDetails = data || [];
+        const { data: trackData, error: trackingError } = await admin.from("order_tracking")
+          .select("id,order_id,status,note")
+          .in("order_id", orderIds);
+        failIf(trackingError, "QA_ORDER_TRACKING_SNAPSHOT_FAILED");
+        tracking = trackData || [];
+      }
+
+      const { data: purchaseDetails, error: purchaseDetailError } = await admin.from("purchase_details")
+        .select("id,purchase_id,product_id,quantity,unit_cost,line_total,lot_code,expiry_date")
+        .like("lot_code", "THOP-QA-%");
+      failIf(purchaseDetailError, "QA_PURCHASE_DETAIL_SNAPSHOT_FAILED");
+      const purchaseIds = [...new Set((purchaseDetails || []).map((x) => x.purchase_id))];
+      let purchases: Record<string, unknown>[] = [];
+      if (purchaseIds.length) {
+        const { data, error } = await admin.from("purchases")
+          .select("id,status,total,created_by,received_at")
+          .in("id", purchaseIds);
+        failIf(error, "QA_PURCHASE_SNAPSHOT_FAILED");
+        purchases = data || [];
+      }
+
+      const productIds = (products || []).map((x) => x.id);
+      let movements: Record<string, unknown>[] = [];
+      if (productIds.length) {
+        const { data, error } = await admin.from("inventory_movements")
+          .select("id,product_id,lot_id,movement_type,quantity,reference_type,reference_id,reason")
+          .in("product_id", productIds);
+        failIf(error, "QA_MOVEMENT_SNAPSHOT_FAILED");
+        movements = data || [];
+      }
+
+      const { data: specialPrices, error: specialPriceError } = await admin.from("special_prices")
+        .select("id,customer_id,product_id,price,starts_at,ends_at")
+        .eq("customer_id", activeProfile.id);
+      failIf(specialPriceError, "QA_SPECIAL_PRICE_SNAPSHOT_FAILED");
+
+      return json({
+        ok: true,
+        snapshot: {
+          active_client: activeProfile,
+          products: products || [],
+          lots: lots || [],
+          orders: orders || [],
+          order_details: orderDetails,
+          tracking,
+          purchases,
+          purchase_details: purchaseDetails || [],
+          movements,
+          special_prices: specialPrices || [],
+        },
+      });
+    } catch (error) {
+      return json({
+        error: "THOP_QA_SNAPSHOT_FAILED",
+        reason: String(error instanceof Error ? error.message : error).slice(0, 220),
+      }, 500);
+    }
+  }
+
   const password = typeof payload.password === "string" ? payload.password : "";
   if (password.length < 6 || password.length > 72) return json({ error: "QA_PASSWORD_LENGTH_INVALID" }, 400);
+  if (payload.action !== undefined && payload.action !== "bootstrap") {
+    return json({ error: "UNSUPPORTED_QA_ACTION" }, 400);
+  }
 
   try {
     // Only two reserved synthetic test identities are managed here. Passwords are
