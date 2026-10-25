@@ -86,36 +86,55 @@ async function run() {
     record("AUTH-01", "Administrator sign-in/profile", "BLOCKED", String(e.message || e).slice(0,240));
   }
 
-  // Register the synthetic client if requested; fall back to sign-in only if signup reports
-  // an existing account. Do not record tokens, passwords, or full Auth responses.
+  // Register the synthetic client if requested. Preserve the signup outcome so a
+  // missing session (commonly email confirmation) is not hidden by a misleading login error.
   try {
     let session;
     if (createClientIfMissing) {
       const signup = await request("/auth/v1/signup", {
         method: "POST",
-        body: { email: clientEmail, password: clientPassword, data: { role: "CLIENTE", customer_type: "PUBLICO" } },
+        body: { email: clientEmail, password: clientPassword, data: { full_name: "THOP QA synthetic client" } },
       });
       if (signup.ok && signup.data?.access_token) {
         session = { token: signup.data.access_token, user: signup.data.user };
       } else {
-        session = await signIn(clientEmail, clientPassword);
+        const signupIssue = signup.ok
+          ? "Signup accepted but no access token was issued; email confirmation may be required"
+          : safeError(signup);
+        const maybeExisting = /already registered|already exists|user already/i.test(
+          String(signup?.data?.msg || signup?.data?.message || signup?.data?.error_description || "")
+        );
+        if (!maybeExisting) {
+          record("AUTH-02", "Client registration", "BLOCKED", signupIssue);
+          session = null;
+        } else {
+          try {
+            session = await signIn(clientEmail, clientPassword);
+          } catch (loginError) {
+            record("AUTH-02", "Client signup/sign-in", "BLOCKED",
+              `Signup indicates existing account (${signupIssue}); sign-in: ${String(loginError.message || loginError).slice(0,160)}`);
+            session = null;
+          }
+        }
       }
     } else {
       session = await signIn(clientEmail, clientPassword);
     }
-    clientToken = session.token;
-    const p = await getProfile(clientToken);
-    if (!p.ok) record("AUTH-02", "Client current_profile", "FAIL", safeError(p));
-    else {
-      clientProfile = p.data;
-      const profile = Array.isArray(clientProfile) ? clientProfile[0] : clientProfile;
-      const role = profile?.role;
-      const type = profile?.customer_type ?? profile?.tipo_cliente ?? profile?.customerType;
-      const status = profile?.status ?? profile?.estado;
-      if (role === "CLIENTE" && (type === "PUBLICO" || type == null)) {
-        record("AUTH-02", "Client profile defaults", type === "PUBLICO" ? "PASS" : "PARTIAL", `role=CLIENTE; customer type=${String(type ?? "not returned")}; status=${String(status ?? "not returned")}`);
-      } else {
-        record("AUTH-02", "Client profile defaults", "FAIL", `Expected CLIENTE/PUBLICO; observed role=${String(role)} type=${String(type)} status=${String(status)}`);
+    if (session?.token) {
+      clientToken = session.token;
+      const p = await getProfile(clientToken);
+      if (!p.ok) record("AUTH-02", "Client current_profile", "FAIL", safeError(p));
+      else {
+        clientProfile = p.data;
+        const profile = Array.isArray(clientProfile) ? clientProfile[0] : clientProfile;
+        const role = profile?.role;
+        const type = profile?.tipo_cliente ?? profile?.customer_type ?? profile?.customerType;
+        const status = profile?.estado_cuenta ?? profile?.status ?? profile?.estado;
+        if (role === "CLIENTE" && (type === "PUBLICO" || type == null)) {
+          record("AUTH-02", "Client profile defaults", type === "PUBLICO" ? "PASS" : "PARTIAL", `role=CLIENTE; customer type=${String(type ?? "not returned")}; status=${String(status ?? "not returned")}`);
+        } else {
+          record("AUTH-02", "Client profile defaults", "FAIL", `Expected CLIENTE/PUBLICO; observed role=${String(role)} type=${String(type)} status=${String(status)}`);
+        }
       }
     }
   } catch (e) {
