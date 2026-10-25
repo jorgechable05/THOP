@@ -1,0 +1,44 @@
+name: THOP-TEST authenticated acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      create_client_if_missing:
+        description: "Register the synthetic client with Supabase Auth if it does not exist"
+        required: true
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  authenticated-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: THOP-TEST
+    steps:
+      - name: Checkout test branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev/supabase-schema-alignment
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run authenticated smoke tests
+        env:
+          SUPABASE_URL: ${{ secrets.THOP_TEST_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.THOP_TEST_SUPABASE_PUBLISHABLE_KEY }}
+          ADMIN_EMAIL: ${{ secrets.THOP_TEST_ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.THOP_TEST_ADMIN_PASSWORD }}
+          CLIENT_EMAIL: ${{ secrets.THOP_TEST_CLIENT_EMAIL }}
+          CLIENT_PASSWORD: ${{ secrets.THOP_TEST_CLIENT_PASSWORD }}
+          CREATE_CLIENT_IF_MISSING: ${{ inputs.create_client_if_missing }}
+        run: node qa/thop-test-authenticated.mjs
+      - name: Upload sanitized report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: thop-test-acceptance-report
+          path: qa-results/thop-test-report.json
+          if-no-files-found: warn
+          retention-days: 7
