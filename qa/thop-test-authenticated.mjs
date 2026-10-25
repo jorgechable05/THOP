@@ -32,6 +32,10 @@ function requireEnv() {
   })) if (!v) missing.push(k);
   if (missing.length) throw new Error(`Missing required GitHub environment secrets: ${missing.join(", ")}`);
   if (!/^https:\/\//i.test(baseUrl)) throw new Error("SUPABASE_URL must be an HTTPS URL");
+  const suppliedHost = new URL(baseUrl).hostname.toLowerCase();
+  if (suppliedHost !== "xodufvmosjtpbamqnqkw.supabase.co") {
+    throw new Error("SUPABASE_URL does not match the authorized THOP-TEST project; refusing to authenticate against another environment");
+  }
   if (adminEmail.trim().toLowerCase() === clientEmail.trim().toLowerCase()) throw new Error("Admin and synthetic client must use different email addresses");
 }
 async function request(path, { method = "GET", token = "", body, query = "" } = {}) {
